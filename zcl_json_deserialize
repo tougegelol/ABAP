@@ -1,0 +1,259 @@
+class ZCL_JSON definition
+  public
+  final
+  create public .
+
+public section.
+
+  types JSON_REGEX type CHAR40 .
+  types JSON_GEASS type CHAR03 .
+  types:
+    BEGIN OF val,
+        fieldname TYPE fieldname,
+        value     TYPE REF TO data,
+        type(1),
+      END OF val .
+  types:
+    val_tab TYPE TABLE OF val .
+  types:
+    serial_tab TYPE TABLE OF string .
+
+  constants SPLIT_T type JSON_REGEX value '"([^"]*)":\[\{"([^\]]*)"\}\]' ##NO_TEXT.
+  constants SPLIT_S type JSON_REGEX value '"([^"]*)":\{([^\{\}]*)\}' ##NO_TEXT.
+  constants SPLIT_F type JSON_REGEX value '"([^"]*)":"([^"]*)"' ##NO_TEXT.
+  data TSERI type SERIAL_TAB .
+  data SSERI type SERIAL_TAB .
+  data FSERI type SERIAL_TAB .
+  data JSON type STRING .
+  constants REGEX_F type JSON_REGEX value '"([^"]*)"' ##NO_TEXT.
+  constants REGEX_S type JSON_REGEX value '"([^"]*)":\{' ##NO_TEXT.
+  constants REGEX_T type JSON_REGEX value '"([^"]*)":\[' ##NO_TEXT.
+  constants SPLIT_S2 type JSON_REGEX value '\{([^\{\}]*)\}' ##NO_TEXT.
+  data LOG type VAL_TAB .
+
+  methods DESERIALIZE
+    importing
+      value(IM_JSON) type STRING .
+  methods SPLIT_TYPE
+    importing
+      value(TYPE) type C .
+  methods GET_FIELD
+    importing
+      !SERIAL_TAB type SERIAL_TAB
+    returning
+      value(X1) like LOG .
+  methods GET_TABLE
+    importing
+      !SERIAL_TAB type SERIAL_TAB
+    returning
+      value(X3) like LOG .
+  methods GET_STRUC
+    importing
+      !SERIAL_TAB type SERIAL_TAB
+    returning
+      value(X2) like LOG .
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+
+    CONSTANTS geass TYPE json_geass VALUE 'TSF' ##NO_TEXT.
+ENDCLASS.
+
+
+
+CLASS ZCL_JSON IMPLEMENTATION.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Public Method ZCL_JSON->DESERIALIZE
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] IM_JSON                        TYPE        STRING
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  METHOD deserialize.
+
+    json = im_json.
+
+    DATA: offset TYPE i.
+
+    DO 3 TIMES.
+      offset = sy-index - 1.
+      split_type( type = geass+offset(1) ).
+    ENDDO.
+
+    CLEAR log.
+
+    APPEND LINES OF get_table( tseri ) TO log.
+    APPEND LINES OF get_struc( sseri ) TO log.
+    APPEND LINES OF get_field( fseri ) TO log.
+
+  ENDMETHOD.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Public Method ZCL_JSON->GET_FIELD
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] SERIAL_TAB                     TYPE        SERIAL_TAB
+* | [<-()] X1                             LIKE        LOG
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  METHOD get_field.
+
+    DATA: offset  TYPE i,
+          length  TYPE i,
+          lt      TYPE match_result_tab,
+          ls      TYPE match_result,
+          content TYPE string,
+          ls_val  TYPE val.
+
+    FIELD-SYMBOLS <value> TYPE any.
+
+    LOOP AT serial_tab INTO content.
+      ls_val-type = geass+2(1).
+      FIND FIRST OCCURRENCE OF REGEX regex_f IN content RESULTS ls.
+      IF sy-subrc EQ 0.
+        offset = ls-offset + 1.
+        length = ls-length - 2.
+        ls_val-fieldname = content+offset(length).
+        REPLACE FIRST OCCURRENCE OF content+ls-offset(ls-length) IN content WITH space.
+      ENDIF.
+      FIND FIRST OCCURRENCE OF REGEX regex_f IN content RESULTS ls.
+      IF sy-subrc EQ 0.
+        offset = ls-offset + 1.
+        length = ls-length - 2.
+        CREATE DATA ls_val-value TYPE string.
+        ASSIGN ls_val-value->* TO <value>.
+        <value> = content+offset(length).
+        REPLACE FIRST OCCURRENCE OF content+ls-offset(ls-length) IN content WITH space.
+      ENDIF.
+      APPEND ls_val TO x1.
+    ENDLOOP.
+
+  ENDMETHOD.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Public Method ZCL_JSON->GET_STRUC
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] SERIAL_TAB                     TYPE        SERIAL_TAB
+* | [<-()] X2                             LIKE        LOG
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  METHOD get_struc.
+
+    DATA: offset  TYPE i,
+          length  TYPE i,
+          lt      TYPE match_result_tab,
+          ls      TYPE match_result,
+          content TYPE string,
+          ls_val  TYPE val,
+          lt_val  TYPE val_tab,
+          itab    TYPE serial_tab.
+
+    FIELD-SYMBOLS: <value> TYPE table,
+                   <struc> TYPE any.
+
+    LOOP AT serial_tab INTO content.
+      ls_val-type = geass+1(1).
+      FIND FIRST OCCURRENCE OF REGEX regex_s IN content RESULTS ls.
+      IF sy-subrc EQ 0.
+        offset = ls-offset + 1.
+        length = ls-length - 4.
+        ls_val-fieldname = content+offset(length).
+        REPLACE FIRST OCCURRENCE OF content+ls-offset(ls-length) IN content WITH space.
+      ENDIF.
+      FIND ALL OCCURRENCES OF REGEX split_f IN content RESULTS lt.
+      IF sy-subrc EQ 0.
+        CLEAR itab.
+        LOOP AT lt INTO ls.
+          APPEND content+ls-offset(ls-length) TO itab.
+        ENDLOOP.
+        CREATE DATA ls_val-value TYPE val_tab.
+        ASSIGN ls_val-value->* TO <value>.
+        <value> = get_field( itab ).
+      ENDIF.
+      APPEND ls_val TO x2.
+    ENDLOOP.
+
+  ENDMETHOD.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Public Method ZCL_JSON->GET_TABLE
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] SERIAL_TAB                     TYPE        SERIAL_TAB
+* | [<-()] X3                             LIKE        LOG
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  METHOD get_table.
+
+    DATA: offset  TYPE i,
+          length  TYPE i,
+          lt      TYPE match_result_tab,
+          ls      TYPE match_result,
+          content TYPE string,
+          ls_val  TYPE val,
+          lt_val  TYPE val_tab,
+          itab    TYPE serial_tab,
+          line    TYPE string.
+
+    FIELD-SYMBOLS: <value> TYPE table,
+                   <struc> TYPE any.
+
+    LOOP AT serial_tab INTO content.
+      ls_val-type = geass+0(1).
+      FIND FIRST OCCURRENCE OF REGEX regex_t IN content RESULTS ls.
+      IF sy-subrc EQ 0.
+        offset = ls-offset + 1.
+        length = ls-length - 4.
+        ls_val-fieldname = content+offset(length).
+        REPLACE FIRST OCCURRENCE OF content+ls-offset(ls-length) IN content WITH space.
+      ENDIF.
+      FIND ALL OCCURRENCES OF REGEX split_s2 IN content RESULTS lt.
+      IF sy-subrc EQ 0.
+        CLEAR itab.
+        LOOP AT lt INTO ls.
+          CLEAR line.
+          line = `"` && sy-tabix && `"` && `:` && content+ls-offset(ls-length).
+          APPEND line TO itab.
+        ENDLOOP.
+        CREATE DATA ls_val-value TYPE val_tab.
+        ASSIGN ls_val-value->* TO <value>.
+        <value> = get_struc( itab ).
+      ENDIF.
+      APPEND ls_val TO x3.
+    ENDLOOP.
+
+  ENDMETHOD.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Public Method ZCL_JSON->SPLIT_TYPE
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] TYPE                           TYPE        C
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  METHOD split_type.
+
+    DATA: offset TYPE i,
+          lt     TYPE match_result_tab,
+          ls     TYPE match_result.
+
+    DATA: regex(7),
+          table(5).
+
+    FIELD-SYMBOLS: <regex> TYPE c,<table> TYPE table.
+
+    regex = `SPLIT_` && type.
+    table = type && `SERI`.
+
+    ASSIGN (regex) TO <regex>.
+    ASSIGN (table) TO <table>.
+
+    CLEAR <table>.
+
+    DO.
+      FIND FIRST OCCURRENCE OF REGEX <regex> IN json RESULTS ls.
+      IF sy-subrc NE 0.
+        EXIT.
+      ENDIF.
+      APPEND json+ls-offset(ls-length) TO <table>.
+      REPLACE ALL OCCURRENCES OF json+ls-offset(ls-length) IN json WITH space.
+    ENDDO.
+
+  ENDMETHOD.
+ENDCLASS.
