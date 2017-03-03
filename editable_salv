@@ -1,0 +1,219 @@
+class Z_EDIT_SALV definition
+  public
+  inheriting from CL_SALV_MODEL_LIST
+  final
+  create public .
+
+public section.
+
+  data R_ADAPTER type ref to CL_SALV_ADAPTER .
+  data R_SALV type ref to CL_SALV_TABLE .
+  data R_FULL_ADAPTER type ref to CL_SALV_FULLSCREEN_ADAPTER .
+  data S_LAYO type LVC_S_LAYO .
+  data R_GRID type ref to CL_GUI_ALV_GRID .
+  data R_STBL type LVC_S_STBL .
+  data T_ROW type SALV_T_ROW .
+  data:
+    s_row TYPE LINE OF salv_t_row .
+  data L_KEY type SALV_S_LAYOUT_KEY .
+  data R_LAYO type ref to CL_SALV_LAYOUT .
+  data R_SELE type ref to CL_SALV_SELECTIONS .
+  data R_FUNC type ref to CL_SALV_FUNCTIONS_LIST .
+  data R_COLS type ref to CL_SALV_COLUMNS_TABLE .
+  data R_COL type ref to CL_SALV_COLUMN .
+  data R_SORTS type ref to CL_SALV_SORTS .
+  data R_AGGRS type ref to CL_SALV_AGGREGATIONS .
+  data R_FILTS type ref to CL_SALV_FILTERS .
+  data R_EVTS type ref to CL_SALV_EVENTS_TABLE .
+  data R_SETTINGS type ref to CL_SALV_DISPLAY_SETTINGS .
+
+  methods GET_ADAPTER
+    importing
+      !O_MODEL type ref to CL_SALV_MODEL .
+  methods TOGGLE_STATUS .
+  methods USER_COMMAND
+    for event ADDED_FUNCTION of CL_SALV_EVENTS
+    importing
+      !E_SALV_FUNCTION .
+  methods DOUBLE_CLICK
+    for event DOUBLE_CLICK of CL_SALV_EVENTS_TABLE
+    importing
+      !ROW
+      !COLUMN .
+  methods DATA_CHANGED
+    for event DATA_CHANGED of CL_GUI_ALV_GRID
+    importing
+      !ER_DATA_CHANGED
+      !E_ONF4
+      !E_ONF4_BEFORE
+      !E_ONF4_AFTER
+      !E_UCOMM .
+  methods CONSTRUCTOR
+    importing
+      value(I_SYST) type SYST optional
+      value(I_TABLE) type STANDARD TABLE optional .
+  methods GET_GRID
+    returning
+      value(I_GRID) type ref to CL_GUI_ALV_GRID .
+  methods GET_ATTRIBUTES .
+  PROTECTED SECTION.
+
+    DATA r_ctrler TYPE REF TO cl_salv_controller_model .
+    DATA r_model TYPE REF TO cl_salv_model .
+    DATA system TYPE syst .
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+
+CLASS Z_EDIT_SALV IMPLEMENTATION.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Public Method Z_EDIT_SALV->CONSTRUCTOR
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] I_SYST                         TYPE        SYST(optional)
+* | [--->] I_TABLE                        TYPE        STANDARD TABLE(optional)
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  METHOD constructor.
+    super->constructor( ).
+
+    system = i_syst.
+
+    r_stbl-col = 'X'.
+    r_stbl-row = 'X'.
+
+  ENDMETHOD.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Public Method Z_EDIT_SALV->DATA_CHANGED
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] ER_DATA_CHANGED                LIKE
+* | [--->] E_ONF4                         LIKE
+* | [--->] E_ONF4_BEFORE                  LIKE
+* | [--->] E_ONF4_AFTER                   LIKE
+* | [--->] E_UCOMM                        LIKE
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  METHOD data_changed.
+    PERFORM    esalv_data_changed
+    IN PROGRAM (system-cprog)
+    USING      er_data_changed
+    IF FOUND.
+  ENDMETHOD.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Public Method Z_EDIT_SALV->DOUBLE_CLICK
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] ROW                            LIKE
+* | [--->] COLUMN                         LIKE
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  METHOD double_click.
+    PERFORM    esalv_double_click
+    IN PROGRAM (system-cprog)
+    USING      row
+               column
+    IF FOUND.
+  ENDMETHOD.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Public Method Z_EDIT_SALV->GET_ADAPTER
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] O_MODEL                        TYPE REF TO CL_SALV_MODEL
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  METHOD get_adapter.
+
+    r_model = o_model.
+
+    CHECK r_model IS BOUND.
+    r_ctrler = r_model->r_controller.
+
+    CHECK r_ctrler IS BOUND.
+    r_adapter = r_ctrler->r_adapter.
+
+  ENDMETHOD.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Public Method Z_EDIT_SALV->GET_ATTRIBUTES
+* +-------------------------------------------------------------------------------------------------+
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  METHOD get_attributes.
+
+    CHECK r_salv IS BOUND.
+
+    r_layo = r_salv->get_layout( ).
+    r_sele = r_salv->get_selections( ).
+    r_func = r_salv->get_functions( ).
+    r_cols = r_salv->get_columns( ).
+    r_sorts = r_salv->get_sorts( ).
+    r_aggrs = r_salv->get_aggregations( ).
+    r_filts = r_salv->get_filters( ).
+    r_evts = r_salv->get_event( ).
+    r_settings = r_salv->get_display_settings( ).
+
+  ENDMETHOD.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Public Method Z_EDIT_SALV->GET_GRID
+* +-------------------------------------------------------------------------------------------------+
+* | [<-()] I_GRID                         TYPE REF TO CL_GUI_ALV_GRID
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  METHOD get_grid.
+
+    FIELD-SYMBOLS <s_fcat> TYPE lvc_s_fcat.
+
+    CHECK r_salv IS BOUND.
+
+    r_model ?= r_salv.
+
+    me->get_adapter( r_model ).
+
+    r_full_adapter ?= me->r_adapter.
+
+    i_grid = r_full_adapter->get_grid( ).
+
+    IF i_grid IS BOUND.
+      SET HANDLER me->data_changed FOR i_grid.
+    ENDIF.
+  ENDMETHOD.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Public Method Z_EDIT_SALV->TOGGLE_STATUS
+* +-------------------------------------------------------------------------------------------------+
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  METHOD toggle_status.
+
+    DATA: t_fcat TYPE lvc_t_fcat.
+
+    FIELD-SYMBOLS <s_fcat> TYPE lvc_s_fcat.
+
+    CHECK r_salv IS BOUND.
+
+    r_model ?= r_salv.
+
+    me->get_adapter( r_model ).
+
+    r_full_adapter ?= me->r_adapter.
+
+    r_grid = r_full_adapter->get_grid( ).
+
+  ENDMETHOD.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Public Method Z_EDIT_SALV->USER_COMMAND
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] E_SALV_FUNCTION                LIKE
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  METHOD user_command.
+    PERFORM    esalv_user_command
+    IN PROGRAM (system-cprog)
+    USING      e_salv_function
+    IF FOUND.
+  ENDMETHOD.
+ENDCLASS.
