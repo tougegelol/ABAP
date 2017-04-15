@@ -1,61 +1,73 @@
-class ZCL_JSON definition
-  public
-  final
-  create public .
+CLASS zcl_json DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
 
-public section.
+  PUBLIC SECTION.
 
-  types JSON_REGEX type CHAR40 .
-  types JSON_GEASS type CHAR03 .
-  types:
-    BEGIN OF val,
+    TYPES json_regex TYPE char40 .
+    TYPES json_geass TYPE char03 .
+    TYPES:
+      BEGIN OF val,
         fieldname TYPE fieldname,
         value     TYPE REF TO data,
         type(1),
       END OF val .
-  types:
-    val_tab TYPE TABLE OF val .
-  types:
-    serial_tab TYPE TABLE OF string .
+    TYPES:
+      BEGIN OF valx,
+        fieldname TYPE fieldname,
+        value     TYPE string,
+        type(1),
+      END OF valx .
+    TYPES:
+      val_tab  TYPE TABLE OF val .
+    TYPES:
+      valx_tab TYPE TABLE OF valx .
+    TYPES:
+      serial_tab TYPE TABLE OF string .
 
-  constants SPLIT_T type JSON_REGEX value '"([^"]*)":\[\{"([^\]]*)"\}\]' ##NO_TEXT.
-  constants SPLIT_S type JSON_REGEX value '"([^"]*)":\{([^\{\}]*)\}' ##NO_TEXT.
-  constants SPLIT_F type JSON_REGEX value '"([^"]*)":"([^"]*)"' ##NO_TEXT.
-  data TSERI type SERIAL_TAB .
-  data SSERI type SERIAL_TAB .
-  data FSERI type SERIAL_TAB .
-  data JSON type STRING .
-  constants REGEX_F type JSON_REGEX value '"([^"]*)"' ##NO_TEXT.
-  constants REGEX_S type JSON_REGEX value '"([^"]*)":\{' ##NO_TEXT.
-  constants REGEX_T type JSON_REGEX value '"([^"]*)":\[' ##NO_TEXT.
-  constants SPLIT_S2 type JSON_REGEX value '\{([^\{\}]*)\}' ##NO_TEXT.
-  data LOG type VAL_TAB .
+    CONSTANTS split_t TYPE json_regex VALUE '"([^"]*)":\[\{"([^\]]*)"\}\]' ##NO_TEXT.
+    CONSTANTS split_s TYPE json_regex VALUE '"([^"]*)":\{([^\{\}]*)\}' ##NO_TEXT.
+    CONSTANTS split_f TYPE json_regex VALUE '"([^"]*)":"([^"]*)"' ##NO_TEXT.
+    DATA tseri TYPE serial_tab .
+    DATA sseri TYPE serial_tab .
+    DATA fseri TYPE serial_tab .
+    DATA json TYPE string .
+    CONSTANTS regex_f TYPE json_regex VALUE '"([^"]*)"' ##NO_TEXT.
+    CONSTANTS regex_s TYPE json_regex VALUE '"([^"]*)":\{' ##NO_TEXT.
+    CONSTANTS regex_t TYPE json_regex VALUE '"([^"]*)":\[' ##NO_TEXT.
+    CONSTANTS split_s2 TYPE json_regex VALUE '\{([^\{\}]*)\}' ##NO_TEXT.
+    DATA log TYPE val_tab .
+    DATA xlog TYPE valx_tab .
 
-  methods DESERIALIZE
-    importing
-      value(IM_JSON) type STRING .
-  methods SPLIT_TYPE
-    importing
-      value(TYPE) type C .
-  methods GET_FIELD
-    importing
-      !SERIAL_TAB type SERIAL_TAB
-    returning
-      value(X1) like LOG .
-  methods GET_TABLE
-    importing
-      !SERIAL_TAB type SERIAL_TAB
-    returning
-      value(X3) like LOG .
-  methods GET_STRUC
-    importing
-      !SERIAL_TAB type SERIAL_TAB
-    returning
-      value(X2) like LOG .
+    METHODS deserialize
+      IMPORTING
+        VALUE(im_json) TYPE string .
+    METHODS split_type
+      IMPORTING
+        VALUE(type) TYPE c .
+    METHODS get_field
+      IMPORTING
+        !serial_tab TYPE serial_tab
+      RETURNING
+        VALUE(x1)   LIKE log .
+    METHODS get_table
+      IMPORTING
+        !serial_tab TYPE serial_tab
+      RETURNING
+        VALUE(x3)   LIKE log .
+    METHODS get_struc
+      IMPORTING
+        !serial_tab TYPE serial_tab
+      RETURNING
+        VALUE(x2)   LIKE log .
+    METHODS execute
+      IMPORTING
+        VALUE(im_json) TYPE string .
   PROTECTED SECTION.
-  PRIVATE SECTION.
+private section.
 
-    CONSTANTS geass TYPE json_geass VALUE 'TSF' ##NO_TEXT.
+  constants GEASS type JSON_GEASS value 'TSF' ##NO_TEXT.
 ENDCLASS.
 
 
@@ -84,6 +96,74 @@ CLASS ZCL_JSON IMPLEMENTATION.
     APPEND LINES OF get_table( tseri ) TO log.
     APPEND LINES OF get_struc( sseri ) TO log.
     APPEND LINES OF get_field( fseri ) TO log.
+
+  ENDMETHOD.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Public Method ZCL_JSON->EXECUTE
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] IM_JSON                        TYPE        STRING
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  METHOD execute.
+
+    DATA: xseri  TYPE LINE OF serial_tab,
+          ls     TYPE match_result,
+          length TYPE i,
+          offset TYPE i,
+          ls_log TYPE LINE OF valx_tab.
+
+    json = im_json.
+
+    DO 3 TIMES.
+      offset = sy-index - 1.
+      split_type( type = geass+offset(1) ).
+    ENDDO.
+
+    CLEAR xlog.
+    LOOP AT tseri INTO xseri.
+      FIND FIRST OCCURRENCE OF REGEX `"([^"]*)":` IN xseri RESULTS ls.
+      IF sy-subrc EQ 0.
+        offset = ls-offset + 1.
+        length = ls-length - 3.
+        ls_log-fieldname = xseri+offset(length).
+        ls_log-type = 'T'.
+
+        REPLACE FIRST OCCURRENCE OF xseri+ls-offset(ls-length) IN xseri WITH space.
+        ls_log-value = xseri.
+        APPEND ls_log TO xlog.
+      ENDIF.
+    ENDLOOP.
+
+    LOOP AT sseri INTO xseri.
+      FIND FIRST OCCURRENCE OF REGEX `"([^"]*)":` IN xseri RESULTS ls.
+      IF sy-subrc EQ 0.
+        offset = ls-offset + 1.
+        length = ls-length - 3.
+        ls_log-fieldname = xseri+offset(length).
+        ls_log-type = 'S'.
+
+        REPLACE FIRST OCCURRENCE OF xseri+ls-offset(ls-length) IN xseri WITH space.
+        ls_log-value = xseri.
+        APPEND ls_log TO xlog.
+      ENDIF.
+    ENDLOOP.
+
+    LOOP AT fseri INTO xseri.
+      FIND FIRST OCCURRENCE OF REGEX `"([^"]*)":` IN xseri RESULTS ls.
+      IF sy-subrc EQ 0.
+        offset = ls-offset + 1.
+        length = ls-length - 3.
+        ls_log-fieldname = xseri+offset(length).
+        ls_log-type = 'F'.
+        REPLACE FIRST OCCURRENCE OF xseri+ls-offset(ls-length) IN xseri WITH space.
+        ls_log-value = xseri.
+        APPEND ls_log TO xlog.
+      ENDIF.
+    ENDLOOP.
+
+
+
 
   ENDMETHOD.
 
@@ -252,6 +332,7 @@ CLASS ZCL_JSON IMPLEMENTATION.
         EXIT.
       ENDIF.
       APPEND json+ls-offset(ls-length) TO <table>.
+
       REPLACE ALL OCCURRENCES OF json+ls-offset(ls-length) IN json WITH space.
     ENDDO.
 
